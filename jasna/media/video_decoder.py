@@ -308,6 +308,7 @@ class NvidiaVideoReader:
         target_format = "p010le" if ten_bit else "nv12"
         dtype = torch.uint16 if ten_bit else torch.uint8
         bytes_per_sample = 2 if ten_bit else 1
+        cpu_conversion = self.vendor is AcceleratorVendor.AMD
 
         converter = YuvToRgbConverter(
             self.height,
@@ -315,7 +316,8 @@ class NvidiaVideoReader:
             self.metadata.color_space,
             self._full_range,
             ten_bit,
-            self.device,
+            #self.device,
+            torch.device("cpu") if cpu_conversion else self.device,
         )
         reformatter = VideoReformatter()
         color_range = AvColorRange.JPEG if self._full_range else AvColorRange.MPEG
@@ -325,8 +327,20 @@ class NvidiaVideoReader:
         # the fallback's extra memory: H2D copies and conversion kernels are
         # ordered on the same stream, so the next H2D overwrite of the staging
         # frame starts only after the prior conversion kernel consumed it.
-        pinned = torch.empty((self.batch_size, H + H // 2, W), dtype=dtype, pin_memory=True)
-        staging = torch.empty((H + H // 2, W), dtype=dtype, device=self.device)
+        #pinned = torch.empty((self.batch_size, H + H // 2, W), dtype=dtype, pin_memory=True)
+        #staging = torch.empty((H + H // 2, W), dtype=dtype, device=self.device)
+        pinned = None
+        staging = None
+        if cpu_conversion:
+            host_batch = torch.empty(
+                (self.batch_size, 3, H, W), dtype=torch.uint8, pin_memory=True
+            )
+        else:
+            pinned = torch.empty(
+                (self.batch_size, H + H // 2, W), dtype=dtype, pin_memory=True
+            )
+            staging = torch.empty((H + H // 2, W), dtype=dtype, device=self.device)
+        
         stream = new_stream(self.device)
 
         while group:
@@ -353,15 +367,30 @@ class NvidiaVideoReader:
                 uv = torch.frombuffer(uv_plane, dtype=dtype).reshape(
                     H // 2, uv_plane.line_size // bytes_per_sample
                 )[:, :W]
-                pinned[i, :H].copy_(y)
-                pinned[i, H:].copy_(uv)
+                # pinned[i, :H].copy_(y)
+                # pinned[i, H:].copy_(uv)
+                if cpu_conversion:
+                    converter.convert_into(y, uv.unflatten(1, (W // 2, 2)), host_batch[i])
+                else:
+                    assert pinned is not None
+                    pinned[i, :H].copy_(y)
+                    pinned[i, H:].copy_(uv)
 
             with stream_context(stream):
-                for i in range(len(group)):
-                    staging.copy_(pinned[i], non_blocking=True)
-                    converter.convert_into(
-                        staging[:H], staging[H:].view(H // 2, W // 2, 2), batch[i]
-                    )
+                # for i in range(len(group)):
+                #     staging.copy_(pinned[i], non_blocking=True)
+                #     converter.convert_into(
+                #         staging[:H], staging[H:].view(H // 2, W // 2, 2), batch[i]
+                #     )
+                if cpu_conversion:
+                    batch.copy_(host_batch[: len(group)], non_blocking=True)
+                else:
+                    assert pinned is not None and staging is not None
+                    for i in range(len(group)):
+                        staging.copy_(pinned[i], non_blocking=True)
+                        converter.convert_into(
+                            staging[:H], staging[H:].view(H // 2, W // 2, 2), batch[i]
+                        )
 
             next_group = self._read_group(decoded)
             stream.synchronize()

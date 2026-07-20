@@ -15,6 +15,7 @@ import av
 import torch
 from av.codec.hwaccel import HWAccel
 from av.video.reformatter import Colorspace as AvColorspace, ColorRange as AvColorRange
+from torch import overrides
 
 from jasna.accelerator import (
     AcceleratorVendor,
@@ -134,15 +135,15 @@ DEFAULT_AMF_H264_ENCODER_OPTIONS: dict[str, str] = {
 }
 
 DEFAULT_AMF_HEVC_ENCODER_OPTIONS: dict[str, str] = {
-    "usage": "high_quality",
+    #"usage": "high_quality",
     "quality": "quality",
-    "rc": "qvbr",
+    #"rc": "qvbr",
     "qvbr_quality_level": "25",
     "g": "250",
-    "preanalysis": "1",
-    "vbaq": "1",
-    "profile": "main10",
-    "bitdepth": "10",
+    #"preanalysis": "1",
+    #"vbaq": "1",
+    #"profile": "main10",
+    #"bitdepth": "10",
 }
 
 DEFAULT_AMF_AV1_ENCODER_OPTIONS: dict[str, str] = {
@@ -396,7 +397,9 @@ class NvidiaVideoEncoder:
                         "Conflicting encoder settings: cq and "
                         "qvbr_quality_level are aliases on AMD; use only one"
                     )
-                overrides["qvbr_quality_level"] = overrides.pop("cq")
+                #overrides["qvbr_quality_level"] = overrides.pop("cq")
+                overrides.pop("cq", None)
+                overrides.pop("qvbr_quality_level", None)
             if self.vendor is AcceleratorVendor.NVIDIA:
                 _drop_unsupported_nvenc_overrides(codec, overrides, self.encoder_options)
             self.encoder_options.update(overrides)

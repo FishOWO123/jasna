@@ -36,7 +36,12 @@ uv pip install ".[amd]" \
   --find-links https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2.1/
 
 # AMD Windows
-uv pip install ".[amd]"
+uv pip install ".[amd]" --find-links https://repo.amd.com/rocm/whl-multi-arch/
+
+uv pip install ".[amd_win]" `
+  --index-url https://pypi.org/simple `
+  --extra-index-url https://repo.amd.com/rocm/whl-multi-arch/ `
+  --index-strategy unsafe-best-match
 ```
 
 For Nvidia library builds, you also need:
