@@ -134,17 +134,32 @@ DEFAULT_AMF_H264_ENCODER_OPTIONS: dict[str, str] = {
     "profile": "high",
 }
 
+# DEFAULT_AMF_HEVC_ENCODER_OPTIONS: dict[str, str] = {
+#     #"usage": "high_quality",
+#     "quality": "quality",
+#     "rc": "qvbr",
+#     "qvbr_quality_level": "25",
+#     "g": "250",
+#     #"preanalysis": "1",
+#     #"vbaq": "1",
+#     "profile": "main10",
+#     "bitdepth": "10",
+# }
+
 DEFAULT_AMF_HEVC_ENCODER_OPTIONS: dict[str, str] = {
     #"usage": "high_quality",
     "quality": "quality",
-    #"rc": "qvbr",
-    "qvbr_quality_level": "25",
+    "rc": "cqp",
+    "qp_i": "25",
+    "qp_p": "25",
+    #"qp_b": "25",
     "g": "250",
     #"preanalysis": "1",
     #"vbaq": "1",
-    #"profile": "main10",
-    #"bitdepth": "10",
+    "profile": "main10",
+    "bitdepth": "10",
 }
+
 
 DEFAULT_AMF_AV1_ENCODER_OPTIONS: dict[str, str] = {
     "usage": "high_quality",
@@ -392,14 +407,17 @@ class NvidiaVideoEncoder:
             if "spatial-aq" in overrides and "spatial_aq" in self.encoder_options:
                 overrides["spatial_aq"] = overrides.pop("spatial-aq")
             if self.vendor is AcceleratorVendor.AMD and "cq" in overrides:
-                if "qvbr_quality_level" in overrides:
+                if "qp_i" in overrides:
                     raise ValueError(
                         "Conflicting encoder settings: cq and "
                         "qvbr_quality_level are aliases on AMD; use only one"
                     )
+                overrides["qp_i"] = overrides.pop("cq")
+                overrides["qp_p"] = overrides["qp_i"]
+                #overrides["qp_b"] = overrides["qp_i"]
                 #overrides["qvbr_quality_level"] = overrides.pop("cq")
-                overrides.pop("cq", None)
-                overrides.pop("qvbr_quality_level", None)
+                #overrides.pop("cq", None)
+                #overrides.pop("qvbr_quality_level", None)
             if self.vendor is AcceleratorVendor.NVIDIA:
                 _drop_unsupported_nvenc_overrides(codec, overrides, self.encoder_options)
             self.encoder_options.update(overrides)
